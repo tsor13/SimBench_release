@@ -100,4 +100,8 @@ python generate_answers.py \
     --model_name mistralai/Mistral-7B-Instruct-v0.1 \
     --method token_prob
 
+## Evaluation
+
+After generating LLM responses, use `calculate_simbench_score.py` to compute evaluation metrics comparing the LLM response distributions to human response distributions.
+
 
