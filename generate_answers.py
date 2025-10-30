@@ -95,9 +95,10 @@ def get_token_probabilities_local_model(model, tokenizer, prompt, target_tokens)
         results = {}
         for token in target_tokens:
             encodings = tokenizer.encode(token, add_special_tokens=False)
-            underscored_encodings = tokenizer.encode("_" + token, add_special_tokens=False)
+            # TAYLOR - uhh not sure why this is here - it's not underlining?
+            # underscored_encodings = tokenizer.encode("_" + token, add_special_tokens=False)
             probability_sum = sum(probabilities[encoding].item() for encoding in encodings)
-            probability_sum += sum(probabilities[encoding].item() for encoding in underscored_encodings)
+            # probability_sum += sum(probabilities[encoding].item() for encoding in underscored_encodings)
             results[token] = probability_sum
     return results
 
@@ -238,6 +239,10 @@ def check_chat_model(model_name):
     return any(substring in model_name.lower() for substring in
                ['dpo', 'instruct', 'chat', 'tulu', 'sft', 'it', 'gemini'])
 
+def check_spectrum_model(model_name):
+    return any(substring in model_name.lower() for substring in
+               ['spectrum'])
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--input_file', type=str, help='file location')
 parser.add_argument('--output_file', type=str, help='file location')
@@ -260,8 +265,11 @@ if args.csd3:
     hf_cache_folder = os.environ.get('HF_CACHE_CSD3', '/rds/project/rds-gLFG2ebmCDI/huggingface')
     os.chdir(os.environ.get('CSD3_WORKDIR', '/rds/user/th656/hpc-work/SimBench'))
 else:
-    hf_cache_folder = os.environ.get('HF_CACHE_LOCAL', '/mnt/nas_home/huggingface')
-    os.chdir(os.environ.get('LOCAL_WORKDIR', '/mnt/nas_home/th656/code/CSS/SimBench'))
+    # hf_cache_folder = os.environ.get('HF_CACHE_LOCAL', '/mnt/nas_home/huggingface')
+    hf_cache_folder = os.environ.get('HF_CACHE_LOCAL', '/gscratch/xlab/tsor13/.cache/huggingface')
+    # os.chdir(os.environ.get('LOCAL_WORKDIR', '/mnt/nas_home/th656/code/CSS/SimBench'))
+    # get current directory
+    os.chdir(os.environ.get('LOCAL_WORKDIR', os.getcwd()))
 
 total_probs = []
 model_distribution = []
@@ -311,12 +319,21 @@ else:
         total_system_prompt.append(system_prompt)
         total_user_prompt.append(user_prompt)
         chat_model = check_chat_model(model_name)
+        spectrum_model = check_spectrum_model(model_name)
         if prompt_method == 'token_prob':
             target_tokens = list(dataset.loc[id, 'human_answer'].keys())
             if chat_model:
                 overall_prompt = tokenizer.apply_chat_template(
                     [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                     tokenize=False)
+                    # TAYLOR - hmm i feel like we should be adding the generation prompt here too?
+            elif spectrum_model:
+                overall_prompt = tokenizer.apply_chat_template(
+                    [{"role": "description", "content": system_prompt}, {"role": "input", "content": user_prompt}],
+                    tokenize=False, add_generation_prompt=True)
+                # replace <bos> with ""
+                overall_prompt = overall_prompt.replace("<bos>", "")
+                # TAYLOR - has a double bos problem for gemma, but could ignore for now and just take the result
             else:
                 overall_prompt = system_prompt + "\n" + user_prompt if system_prompt else user_prompt
             probabilities = get_token_probabilities_local_model(model, tokenizer, overall_prompt, target_tokens)
